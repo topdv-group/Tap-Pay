@@ -1,11 +1,10 @@
 # tapandpay_server.py - Main Flask server for attendance and payment system
-from imports import logger
 import os
 import sys
 import time
 import threading
-from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 import firebase_admin
@@ -13,7 +12,18 @@ from firebase_admin import credentials, db
 from waitress import serve
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+import json
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Import logger first
+try:
+    from imports import logger
+except ImportError:
+    # Fallback logger if imports module doesn't exist
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 from helpers_funcs import (
     checkDuplicatePhoneOrRFID,
@@ -24,54 +34,71 @@ from helpers_funcs import (
     init_settings,
     get_setting,
     save_settings_to_firebase,
-    paymentStatusChecker,  # Make sure this is here
-    retry_failed_payments   # Make sure this is here
+    paymentStatusChecker,
+    retry_failed_payments,
+    manual_payment_verification,
+    check_pending_payments
 )
 
+# Ensure logs directory exists
+os.makedirs('logs', exist_ok=True)
 
 # Load environmental variables
 load_dotenv()
- 
- import json
 
+# Get Firebase configuration from environment
 firebase_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-
-if firebase_json:
-    with open("serviceAccountKey.json", "w") as f:
-        f.write(firebase_json)
-# Create Flask app
-app = Flask(__name__, static_folder='static')
-CORS(app)
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "default-secret-key-change-in-production")
-app.config['JSON_SORT_KEYS'] = False
-
-# Firebase configuration
 firebase_key_path = os.getenv("FIREBASE_KEY_PATH")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Validate environment variables before startup
-if not firebase_key_path:
-    logger.error("FIREBASE_KEY_PATH missing in .env")
-    raise ValueError("FIREBASE_KEY_PATH missing in .env")
+if not firebase_key_path and not firebase_json:
+    logger.error("Either FIREBASE_KEY_PATH or FIREBASE_SERVICE_ACCOUNT must be set in .env")
+    raise ValueError("Firebase configuration missing in .env")
 
 if not DATABASE_URL:
     logger.error("DATABASE_URL missing in .env")
     raise ValueError("DATABASE_URL missing in .env")
 
+# Initialize Firebase credentials
+if firebase_json:
+    try:
+        cred_dict = json.loads(firebase_json)
+        cred = credentials.Certificate(cred_dict)
+        logger.info("Firebase credentials loaded from environment variable")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse FIREBASE_SERVICE_ACCOUNT JSON: {e}")
+        raise
+else:
+    cred = credentials.Certificate(firebase_key_path)
+    logger.info("Firebase credentials loaded from file")
+
 # Initialize Firebase SDK
 try:
     if not firebase_admin._apps:
-        cred = credentials.Certificate(firebase_key_path)
         firebase_admin.initialize_app(cred, {
             'databaseURL': DATABASE_URL
         })
         logger.info("Firebase initialized successfully")
     else:
         logger.info("Firebase already initialized")
-        
 except Exception as e:
     logger.error(f"Firebase initialization error: {e}")
     raise
+
+# Create Flask app
+app = Flask(__name__, static_folder='static')
+CORS(app)
+app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "default-secret-key-change-in-production")
+app.config['JSON_SORT_KEYS'] = False
+
+# Initialize rate limiter (after app creation)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 # Initialize settings from Firebase
 try:
@@ -79,6 +106,56 @@ try:
     logger.info("System settings loaded from Firebase")
 except Exception as e:
     logger.error(f"Error loading settings: {e}")
+
+# Store user data in Firebase
+def init_admin_user():
+    """Initialize default admin user if none exists"""
+    try:
+        users_ref = db.reference("USERS")
+        admin_email = os.getenv('ADMIN_EMAIL', 'admin@tapandpay.com').lower()
+        admin_password = os.getenv('ADMIN_PASSWORD', 'Admin123!')
+        
+        # Get all users
+        users = users_ref.get()
+        
+        # Check if admin user already exists
+        admin_exists = False
+        if users:
+            for key, user in users.items():
+                if user.get('email', '').lower() == admin_email:
+                    admin_exists = True
+                    logger.info(f"Admin user already exists: {admin_email}")
+                    break
+        
+        # Create admin if not exists
+        if not admin_exists:
+            salt = secrets.token_hex(16)
+            hashed = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 100000)
+            
+            new_user_ref = users_ref.push()
+            new_user_ref.set({
+                'email': admin_email,
+                'password_hash': hashed.hex(),
+                'salt': salt,
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'role': 'admin'
+            })
+            logger.info(f"✓ Default admin user created: {admin_email}")
+            logger.info(f"✓ Default password: {admin_password}")
+        else:
+            logger.info(f"✓ Admin user exists, skipping creation")
+            
+    except Exception as e:
+        logger.error(f"Error initializing admin user: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Call this after Firebase initialization
+try:
+    init_admin_user()
+except Exception as e:
+    logger.error(f"Failed to initialize admin user: {e}")
 
 
 # =========================
@@ -137,6 +214,7 @@ def health_check():
 # =========================
 
 @app.route("/register", methods=["POST"])
+@limiter.limit("5 per minute") 
 def register():
     """Register a new employee"""
     try:
@@ -313,6 +391,7 @@ def delete_employee(employee_id):
 # =========================
 
 @app.route('/markAttendance', methods=["POST"])
+@limiter.limit("30 per minute")
 def mark_attendance():
     """Mark attendance using RFID"""
     try:
@@ -410,27 +489,31 @@ def pawapay_webhook():
         employees = employee_ref.get()
         
         found = False
-        for key, details in employees.items():
-            if details.get("payoutId") == payout_id:
-                single_ref = db.reference(f"EMPLOYEES/{key}")
-                
-                # Update payment status from webhook
-                single_ref.update({
-                    "payment_status": status,
-                    "webhook_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "webhook_data": data
-                })
-                
-                # ONLY mark as paid when webhook says COMPLETED
-                if status == "COMPLETED":
-                    single_ref.update({"paid": True})
-                    logger.info(f"✓ Payment CONFIRMED for employee {key}")
-                elif status in ["FAILED", "REJECTED", "EXPIRED"]:
-                    single_ref.update({"paid": False})
-                    logger.warning(f"✗ Payment FAILED for employee {key}: {status}")
-                
-                found = True
-                break
+        if employees:
+            for key, details in employees.items():
+                if details.get("payoutId") == payout_id:
+                    single_ref = db.reference(f"EMPLOYEES/{key}")
+                    
+                    # Update payment status from webhook
+                    single_ref.update({
+                        "payment_status": status,
+                        "webhook_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "webhook_data": data
+                    })
+                    
+                    # ONLY mark as paid when webhook says COMPLETED
+                    if status == "COMPLETED":
+                        single_ref.update({"paid": True})
+                        logger.info(f"✓ Payment CONFIRMED for employee {key}")
+                    elif status in ["FAILED", "REJECTED", "EXPIRED"]:
+                        single_ref.update({"paid": False})
+                        logger.warning(f"✗ Payment FAILED for employee {key}: {status}")
+                    
+                    found = True
+                    break
+        
+        if not found:
+            logger.warning(f"Webhook received for unknown payoutId: {payout_id}")
         
         return jsonify({"success": True, "message": "Webhook processed"}), 200
         
@@ -529,8 +612,11 @@ def update_payment_settings():
             settings_ref.update(updates)
             
             # Also update the global settings in helpers_funcs
-            from helpers_funcs import settings as helpers_settings
-            helpers_settings.update(updates)
+            try:
+                from helpers_funcs import settings as helpers_settings
+                helpers_settings.update(updates)
+            except ImportError:
+                pass
             
             logger.info(f"Payment settings updated in Firebase: {updates}")
             
@@ -554,8 +640,11 @@ def reset_settings():
         settings_ref = db.reference("SYSTEM_SETTINGS")
         settings_ref.set(default_settings)
         
-        from helpers_funcs import settings as helpers_settings
-        helpers_settings.update(default_settings)
+        try:
+            from helpers_funcs import settings as helpers_settings
+            helpers_settings.update(default_settings)
+        except ImportError:
+            pass
         
         logger.info("Settings reset to defaults in Firebase")
         return jsonify({"success": True, "message": "Settings reset to defaults"}), 200
@@ -589,7 +678,6 @@ def backup_database():
             'exported_by': 'admin_panel'
         }
         
-        from flask import make_response
         response = make_response(json.dumps(backup_data, indent=2))
         response.headers['Content-Type'] = 'application/json'
         response.headers['Content-Disposition'] = f'attachment; filename=backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
@@ -676,8 +764,6 @@ def clear_logs():
 def download_logs():
     """Download all logs as a file"""
     try:
-        from flask import make_response
-        
         log_file = 'logs/system.log'
         
         if os.path.exists(log_file):
@@ -707,26 +793,30 @@ def get_system_info():
         import flask
         
         # Calculate uptime
-        import time
-        with open('/proc/uptime', 'r') as f:
-            uptime_seconds = float(f.readline().split()[0])
-            uptime_days = int(uptime_seconds // 86400)
-            uptime_hours = int((uptime_seconds % 86400) // 3600)
-            uptime_minutes = int((uptime_seconds % 3600) // 60)
-            uptime_string = f"{uptime_days}d {uptime_hours}h {uptime_minutes}m"
-    except:
         uptime_string = "N/A"
-    
-    info = {
-        'python_version': platform.python_version(),
-        'flask_version': flask.__version__,
-        'firebase_status': 'Connected' if firebase_admin._apps else 'Disconnected',
-        'server_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'system_uptime': uptime_string,
-        'environment': 'Production' if os.getenv('PRODUCTION') == 'true' else 'Development'
-    }
-    
-    return jsonify(info), 200
+        try:
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.readline().split()[0])
+                uptime_days = int(uptime_seconds // 86400)
+                uptime_hours = int((uptime_seconds % 86400) // 3600)
+                uptime_minutes = int((uptime_seconds % 3600) // 60)
+                uptime_string = f"{uptime_days}d {uptime_hours}h {uptime_minutes}m"
+        except:
+            pass
+        
+        info = {
+            'python_version': platform.python_version(),
+            'flask_version': flask.__version__,
+            'firebase_status': 'Connected' if firebase_admin._apps else 'Disconnected',
+            'server_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'system_uptime': uptime_string,
+            'environment': 'Production' if os.getenv('PRODUCTION') == 'true' else 'Development'
+        }
+        
+        return jsonify(info), 200
+    except Exception as e:
+        logger.error(f"Error getting system info: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/admin/backup-info', methods=['GET'])
 def get_backup_info():
@@ -750,12 +840,6 @@ def update_credentials():
     """Update admin credentials"""
     try:
         data = request.get_json()
-        
-        # In production, store hashed passwords in Firebase
-        if data.get('username'):
-            os.environ['ADMIN_USERNAME'] = data['username']
-        if data.get('password'):
-            os.environ['ADMIN_PASSWORD'] = data['password']
         
         # Save to Firebase for persistence
         creds_ref = db.reference("ADMIN_CREDENTIALS")
@@ -840,7 +924,7 @@ def factory_reset():
     """Factory reset - clear all data and reset settings"""
     try:
         data = request.get_json()
-        if not data.get('confirm'):
+        if not data or not data.get('confirm'):
             return jsonify({"error": "Confirmation required"}), 400
         
         # Clear all employees
@@ -864,63 +948,12 @@ def factory_reset():
         logger.error(f"Error during factory reset: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-#AUTHANTICATIONS
-# Store user data in Firebase
-def init_admin_user():
-    """Initialize default admin user if none exists"""
-    try:
-        users_ref = db.reference("USERS")
-        admin_email = os.getenv('ADMIN_EMAIL', 'admin@tapandpay.com').lower()
-        admin_password = os.getenv('ADMIN_PASSWORD', 'Admin123!')
-        
-        # Get all users
-        users = users_ref.get()
-        
-        # Check if admin user already exists
-        admin_exists = False
-        if users:
-            for key, user in users.items():
-                if user.get('email', '').lower() == admin_email:
-                    admin_exists = True
-                    logger.info(f"Admin user already exists: {admin_email}")
-                    break
-        
-        # Create admin if not exists
-        if not admin_exists:
-            # Create default admin
-            salt = secrets.token_hex(16)
-            hashed = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), salt.encode(), 100000)
-            
-            new_user_ref = users_ref.push()
-            new_user_ref.set({
-                'email': admin_email,
-                'password_hash': hashed.hex(),
-                'salt': salt,
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat(),
-                'role': 'admin'
-            })
-            logger.info(f"✓ Default admin user created: {admin_email}")
-            logger.info(f"✓ Default password: {admin_password}")
-        else:
-            logger.info(f"✓ Admin user exists, skipping creation")
-            
-    except Exception as e:
-        logger.error(f"Error initializing admin user: {e}")
-        import traceback
-        traceback.print_exc()
-
-# Call this after Firebase initialization
-try:
-    init_admin_user()
-except Exception as e:
-    logger.error(f"Failed to initialize admin user: {e}")
-
-# Call this after Firebase initialization
-init_admin_user()
+# =========================
+# AUTHENTICATION ENDPOINTS
+# =========================
 
 @app.route('/auth/login', methods=['POST'])
+@limiter.limit("10 per minute") 
 def auth_login():
     """Authenticate user and return token"""
     try:
@@ -939,8 +972,7 @@ def auth_login():
         users = users_ref.get()
         
         if not users:
-            logger.error("No users found in database")
-            return jsonify({"error": "Invalid credentials"}), 401
+            users = {}
         
         user_id = None
         user_data = None
@@ -957,15 +989,11 @@ def auth_login():
         
         # Verify password
         salt = user_data.get('salt')
-        stored_hash = user_data.get('password_hash')
+        stored_hash = str(user_data.get('password_hash', ''))
         
         if not salt or not stored_hash:
             logger.error(f"Invalid user data for {email}")
             return jsonify({"error": "Invalid credentials"}), 401
-        
-        # Convert hex string back to bytes for comparison if needed
-        if isinstance(stored_hash, str):
-            stored_hash = stored_hash
         
         computed_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
         
@@ -1063,10 +1091,11 @@ def auth_forgot_password():
         users = users_ref.get()
         
         user_id = None
-        for key, user in users.items():
-            if user.get('email') == email:
-                user_id = key
-                break
+        if users:
+            for key, user in users.items():
+                if user.get('email') == email:
+                    user_id = key
+                    break
         
         if not user_id:
             # For security, don't reveal that user doesn't exist
@@ -1094,13 +1123,13 @@ def auth_forgot_password():
         logger.info(f"Password reset requested for {email}")
         logger.info(f"Reset link: {reset_link}")
         
-        # Send email
+        # Try to send email
         email_sent = send_reset_email(email, reset_link)
         
         if email_sent:
             return jsonify({
                 "success": True,
-                "message": "Password reset link has been sent to your email address. Please check your inbox (and spam folder)."
+                "message": "Password reset link has been sent to your email address."
             }), 200
         else:
             # Fallback: show link on screen if email fails
@@ -1114,12 +1143,13 @@ def auth_forgot_password():
         logger.error(f"Forgot password error: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 # =========================
 # EMAIL CONFIGURATION
 # =========================
 
 def send_reset_email(email, reset_link):
-    """Send password reset email via Gmail SMTP"""
+    """Send password reset email via SMTP"""
     try:
         # Check if SMTP is enabled
         smtp_enabled = os.getenv('SMTP_ENABLED', 'false').lower() == 'true'
@@ -1140,10 +1170,6 @@ def send_reset_email(email, reset_link):
         smtp_from_email = os.getenv('SMTP_FROM_EMAIL', smtp_username)
         smtp_from_name = os.getenv('SMTP_FROM_NAME', 'Tap & Pay System')
         
-        # Remove spaces from password if any
-        if smtp_password:
-            smtp_password = smtp_password.replace(' ', '')
-        
         if not smtp_username or not smtp_password:
             logger.error("SMTP credentials missing. Check SMTP_USERNAME and SMTP_PASSWORD")
             return False
@@ -1163,50 +1189,17 @@ def send_reset_email(email, reset_link):
         <head>
             <meta charset="UTF-8">
             <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                }}
-                .container {{
-                    max-width: 600px;
-                    margin: 0 auto;
-                    padding: 20px;
-                }}
-                .header {{
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 20px;
-                    text-align: center;
-                    border-radius: 10px 10px 0 0;
-                }}
-                .content {{
-                    background: #f9fafb;
-                    padding: 30px;
-                    border-radius: 0 0 10px 10px;
-                    border: 1px solid #e5e7eb;
-                }}
-                .button {{
-                    display: inline-block;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 12px 30px;
-                    text-decoration: none;
-                    border-radius: 8px;
-                    margin: 20px 0;
-                }}
-                .footer {{
-                    text-align: center;
-                    font-size: 12px;
-                    color: #6b7280;
-                    margin-top: 20px;
-                }}
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }}
+                .button {{ display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; }}
+                .footer {{ text-align: center; font-size: 12px; color: #6b7280; margin-top: 20px; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">
-                    <h1>🔐 Password Reset Request</h1>
-                </div>
+                <div class="header"><h1>🔐 Password Reset Request</h1></div>
                 <div class="content">
                     <p>Hello,</p>
                     <p>You requested to reset your password for your Tap & Pay account.</p>
@@ -1221,9 +1214,7 @@ def send_reset_email(email, reset_link):
                     <p><strong>⚠️ This link will expire in 1 hour.</strong></p>
                     <p>If you didn't request this, please ignore this email.</p>
                 </div>
-                <div class="footer">
-                    <p>Tap & Pay System - Automated Attendance & Payment Management</p>
-                </div>
+                <div class="footer"><p>Tap & Pay System - Automated Attendance & Payment Management</p></div>
             </div>
         </body>
         </html>
@@ -1232,9 +1223,6 @@ def send_reset_email(email, reset_link):
         msg.attach(MIMEText(html_body, 'html'))
         
         # Connect and send
-        logger.info(f"Connecting to {smtp_server}:{smtp_port}...")
-        
-        # For Gmail port 587 (TLS)
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(smtp_username, smtp_password)
@@ -1244,12 +1232,6 @@ def send_reset_email(email, reset_link):
         logger.info(f"✅ Password reset email sent successfully to {email}")
         return True
         
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication failed. Check your email and app password: {e}")
-        return False
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP error: {e}")
-        return False
     except Exception as e:
         logger.error(f"Failed to send reset email: {e}")
         return False
@@ -1366,7 +1348,9 @@ def auth_change_password():
         return jsonify({"error": str(e)}), 500
 
 
-# Add after existing admin endpoints
+# =========================
+# PAYMENT ADMIN ENDPOINTS
+# =========================
 
 @app.route('/admin/payments/pending', methods=['GET'])
 def get_pending_payments():
@@ -1404,20 +1388,19 @@ def get_pending_payments():
 @app.route('/admin/payments/verify/<employee_id>', methods=['POST'])
 def verify_payment_manually(employee_id):
     """Manually verify and fix payment status"""
-    from helpers_funcs import manual_payment_verification
-    
-    result = manual_payment_verification(employee_id)
-    
-    if result["success"]:
-        return jsonify(result), 200
-    else:
-        return jsonify(result), 400
+    try:
+        result = manual_payment_verification(employee_id)
+        if result["success"]:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+    except Exception as e:
+        logger.error(f"Error verifying payment: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/admin/payments/retry-all', methods=['POST'])
 def retry_all_failed_payments():
     """Manually trigger retry for all failed payments"""
-    from helpers_funcs import retry_failed_payments
-    
     try:
         retry_failed_payments()
         return jsonify({
@@ -1431,8 +1414,6 @@ def retry_all_failed_payments():
 @app.route('/admin/payments/check-pending', methods=['POST'])
 def check_pending_payments_manual():
     """Manually trigger pending payment check"""
-    from helpers_funcs import check_pending_payments
-    
     try:
         check_pending_payments()
         return jsonify({
@@ -1480,6 +1461,8 @@ def get_payment_stats():
     except Exception as e:
         logger.error(f"Error getting payment stats: {e}")
         return jsonify({"error": str(e)}), 500
+
+
 # =========================
 # ERROR HANDLERS
 # =========================
@@ -1525,19 +1508,20 @@ if __name__ == "__main__":
     )
     payment_checker_thread.start()
     logger.info("Payment status checker thread started (fallback for missed webhooks)")
-
-    # Start retry thread for failed payments - DON'T start this separately
-    # The paymentStatusChecker already calls retry_failed_payments()
-    # So remove the separate retry thread to avoid duplicates
     
     logger.info("Background threads started successfully")
     
-    check_missed_events_on_startup()
+    # Check for missed events on startup
+    try:
+        check_missed_events_on_startup()
+    except Exception as e:
+        logger.error(f"Error checking missed events: {e}")
     
-    port = int(os.getenv("PORT", 5000))
+    # Get port from environment variable
+    port = int(os.environ.get("PORT", 5000))
     
     logger.info(f"Starting Flask server on http://0.0.0.0:{port}")
     logger.info(f"Open your browser and go to: http://localhost:{port}")
     
-    port = int(os.environ.get("PORT", 5000))
+    # Serve with waitress
     serve(app, host="0.0.0.0", port=port)
