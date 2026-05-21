@@ -28,9 +28,17 @@ from helpers_funcs import (
     retry_failed_payments   # Make sure this is here
 )
 
+
 # Load environmental variables
 load_dotenv()
  
+ import json
+
+firebase_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+
+if firebase_json:
+    with open("serviceAccountKey.json", "w") as f:
+        f.write(firebase_json)
 # Create Flask app
 app = Flask(__name__, static_folder='static')
 CORS(app)
