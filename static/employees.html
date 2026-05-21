@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap & Pay - Employees</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tap"></i>
+                <span>Tap & Pay</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="employees.html" class="nav-item active">
+                    <i class="fas fa-users"></i>
+                    <span>Employees</span>
+                </a>
+                <a href="attendance.html" class="nav-item">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>Attendance</span>
+                </a>
+                <a href="register.html" class="nav-item">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Register</span>
+                </a>
+                <!-- ADD THIS LINE BELOW - Admin link -->
+                <a href="admin.html" class="nav-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+                <div class="time-display" id="currentTime"></div>
+            </div>
+
+            <div class="user-info" style="padding: 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-user-circle" style="font-size: 32px; color: var(--primary-color);"></i>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">Logged in as</div>
+                        <div style="font-size: 14px; font-weight: 600;" id="userEmail">Admin</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Employees</h1>
+                    <p>Manage your workforce efficiently</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" onclick="window.location.href='register.html'">
+                        <i class="fas fa-user-plus"></i> Add Employee
+                    </button>
+                    <button class="btn-refresh" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Search and Filter -->
+            <div class="search-filter">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search by name, phone, or RFID...">
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="attended">Attended Today</button>
+                    <button class="filter-btn" data-filter="paid">Paid Today</button>
+                    <button class="filter-btn" data-filter="pending">Pending Payment</button>
+                </div>
+            </div>
+
+            <!-- Employees Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <div class="table-row">
+                        <div class="col-checkbox"><input type="checkbox" id="selectAll"></div>
+                        <div class="col-name">Name</div>
+                        <div class="col-phone">Phone</div>
+                        <div class="col-rfid">RFID</div>
+                        <div class="col-status">Status</div>
+                        <div class="col-payment">Payment</div>
+                        <div class="col-actions">Actions</div>
+                    </div>
+                </div>
+                <div class="table-body" id="employeesTable">
+                    <div class="loading">Loading employees...</div>
+                </div>
+            </div>
+
+            <!-- Bulk Actions -->
+            <div class="bulk-actions" id="bulkActions" style="display: none;">
+                <span id="selectedCount">0</span> employees selected
+                <button class="btn-danger" onclick="bulkDelete()">
+                    <i class="fas fa-trash"></i> Delete Selected
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Employee Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Employee</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="editForm">
+                <input type="hidden" id="editEmployeeId">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="editPhone" required>
+                </div>
+                <div class="form-group">
+                    <label>RFID Tag</label>
+                    <input type="text" id="editRfid" required>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="JS/config.js"></script>
+    <script src="JS/employees.js"></script>
+    <script src="JS/auth.js"></script>
+</body>
+</html>

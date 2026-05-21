@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap & Pay - Attendance</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tap"></i>
+                <span>Tap & Pay</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="employees.html" class="nav-item">
+                    <i class="fas fa-users"></i>
+                    <span>Employees</span>
+                </a>
+                <a href="attendance.html" class="nav-item active">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>Attendance</span>
+                </a>
+                <a href="register.html" class="nav-item">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Register</span>
+                </a>
+                    <!-- ADD THIS LINE BELOW - Admin link -->
+                <a href="admin.html" class="nav-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+                <div class="time-display" id="currentTime"></div>
+            </div>
+
+            <div class="user-info" style="padding: 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-user-circle" style="font-size: 32px; color: var(--primary-color);"></i>
+                <div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Logged in as</div>
+                    <div style="font-size: 14px; font-weight: 600;" id="userEmail">Admin</div>
+                </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Attendance Tracking</h1>
+                    <p>Monitor daily attendance and payments</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-refresh" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Date Picker and RFID Input -->
+            <div class="attendance-controls">
+                <div class="rfid-reader">
+                    <div class="rfid-input-group">
+                        <i class="fas fa-id-card"></i>
+                        <input type="text" id="rfidInput" placeholder="Tap or scan RFID card..." autofocus>
+                        <button class="btn-primary" onclick="markAttendance()">
+                            <i class="fas fa-fingerprint"></i> Mark Attendance
+                        </button>
+                    </div>
+                    <div id="attendanceMessage" class="attendance-message"></div>
+                </div>
+                <div class="date-picker">
+                    <label>Select Date:</label>
+                    <input type="date" id="attendanceDate">
+                </div>
+            </div>
+
+            <!-- Today's Summary -->
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <i class="fas fa-user-check"></i>
+                    <div>
+                        <h3 id="todayAttended">0</h3>
+                        <p>Attended Today</p>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <i class="fas fa-money-check-alt"></i>
+                    <div>
+                        <h3 id="todayPaid">0</h3>
+                        <p>Paid Today</p>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <i class="fas fa-hourglass-half"></i>
+                    <div>
+                        <h3 id="pendingPayment">0</h3>
+                        <p>Pending Payment</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <div class="table-row">
+                        <div class="col-name">Employee Name</div>
+                        <div class="col-phone">Phone</div>
+                        <div class="col-time">Attendance Time</div>
+                        <div class="col-status">Status</div>
+                        <div class="col-payment-status">Payment Status</div>
+                    </div>
+                </div>
+                <div class="table-body" id="attendanceTable">
+                    <div class="loading">Loading attendance data...</div>
+                </div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="export-section">
+                <button class="btn-secondary" onclick="exportAttendance()">
+                    <i class="fas fa-download"></i> Export to CSV
+                </button>
+                <button class="btn-secondary" onclick="printReport()">
+                    <i class="fas fa-print"></i> Print Report
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script src="JS/config.js"></script>
+    <script src="JS/attendance.js"></script>
+    <script src="JS/auth.js"></script>
+</body>
+</html>

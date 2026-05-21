@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap & Pay - Register Employee</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tap"></i>
+                <span>Tap & Pay</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="employees.html" class="nav-item">
+                    <i class="fas fa-users"></i>
+                    <span>Employees</span>
+                </a>
+                <a href="attendance.html" class="nav-item">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>Attendance</span>
+                </a>
+                <a href="register.html" class="nav-item active">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Register</span>
+                </a>
+                <a href="admin.html" class="nav-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+                <div class="time-display" id="currentTime"></div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Register New Employee</h1>
+                    <p>Add new employees to the system</p>
+                </div>
+            </header>
+
+            <div class="register-container">
+                <div class="register-card">
+                    <div class="register-header">
+                        <i class="fas fa-id-card"></i>
+                        <h2>Employee Information</h2>
+                        <p>Fill in the details below to register a new employee</p>
+                    </div>
+                    
+                    <form id="registerForm" class="register-form">
+                        <div class="form-group">
+                            <label for="name">
+                                <i class="fas fa-user"></i>
+                                Full Name
+                            </label>
+                            <input type="text" id="name" name="name" required 
+                                   placeholder="Enter employee's full name">
+                            <div class="error-message" id="nameError"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="phone">
+                                <i class="fas fa-phone-alt"></i>
+                                Phone Number
+                            </label>
+                            <input type="tel" id="phone" name="phone" required 
+                                   placeholder="e.g., 0788123456">
+                            <small class="form-hint">Rwandan phone number (9-10 digits)</small>
+                            <div class="error-message" id="phoneError"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="rfid">
+                                <i class="fas fa-id-card"></i>
+                                RFID Tag
+                            </label>
+                            <input type="text" id="rfid" name="rfid" required 
+                                   placeholder="Tap or scan RFID card">
+                            <small class="form-hint">Tap the RFID card to automatically fill</small>
+                            <div class="error-message" id="rfidError"></div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" onclick="resetForm()">
+                                <i class="fas fa-undo-alt"></i> Reset
+                            </button>
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save"></i> Register Employee
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="successMessage" class="success-message" style="display: none;">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Employee registered successfully!</span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3><i class="fas fa-info-circle"></i> Quick Tips</h3>
+                    <ul>
+                        <li><i class="fas fa-check"></i> Ensure phone number is correct for payments</li>
+                        <li><i class="fas fa-check"></i> RFID tags must be unique in the system</li>
+                        <li><i class="fas fa-check"></i> Phone numbers should be in Rwandan format</li>
+                        <li><i class="fas fa-check"></i> Double-check all information before submitting</li>
+                    </ul>
+                    
+                    <div class="stats-mini">
+                        <h4>System Stats</h4>
+                        <div class="stat-item">
+                            <span>Total Employees:</span>
+                            <strong id="totalCount">0</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span>Today's Attendance:</span>
+                            <strong id="todayCount">0</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="JS/config.js"></script>
+    <script src="JS/register.js"></script>
+    <script src="JS/auth.js"></script>
+</body>
+</html>

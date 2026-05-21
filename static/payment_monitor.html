@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Monitor - Tap & Pay</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #666;
+            margin-top: 10px;
+        }
+        .payments-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #007bff;
+            color: white;
+        }
+        .status-pending {
+            color: orange;
+            font-weight: bold;
+        }
+        .status-completed {
+            color: green;
+            font-weight: bold;
+        }
+        .status-failed {
+            color: red;
+            font-weight: bold;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .refresh-btn {
+            background: #28a745;
+            margin-bottom: 20px;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 Payment Monitor & Fallback System</h1>
+        
+        <div class="stats" id="stats">
+            <!-- Stats will be loaded here -->
+        </div>
+        
+        <div>
+            <button class="refresh-btn" onclick="loadData()">🔄 Refresh Data</button>
+            <button onclick="checkPendingPayments()">🔍 Check Pending Payments</button>
+            <button onclick="retryFailedPayments()">🔄 Retry Failed Payments</button>
+        </div>
+        
+        <div class="payments-table">
+            <h2>Pending Payments</h2>
+            <div id="pending-payments">
+                <!-- Table will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '';
+        
+        async function loadStats() {
+            try {
+                const response = await fetch('/admin/payments/stats');
+                const stats = await response.json();
+                
+                const statsHtml = `
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_payments_requested || 0}</div>
+                        <div class="stat-label">Total Payments</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: orange;">${stats.pending || 0}</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: green;">${stats.completed || 0}</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: red;">${stats.failed || 0}</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.manual_review || 0}</div>
+                        <div class="stat-label">Manual Review</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_amount_paid || 0} RWF</div>
+                        <div class="stat-label">Total Paid</div>
+                    </div>
+                `;
+                
+                document.getElementById('stats').innerHTML = statsHtml;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        async function loadPendingPayments() {
+            try {
+                const response = await fetch('/admin/payments/pending');
+                const data = await response.json();
+                
+                if (data.payments.length === 0) {
+                    document.getElementById('pending-payments').innerHTML = '<p>No pending payments found.</p>';
+                    return;
+                }
+                
+                let tableHtml = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employee Name</th>
+                                <th>Phone</th>
+                                <th>Amount</th>
+                                <th>Request Date</th>
+                                <th>Retry Count</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                for (const payment of data.payments) {
+                    tableHtml += `
+                        <tr>
+                            <td>${payment.name}</td>
+                            <td>${payment.phone}</td>
+                            <td>${payment.amount} RWF</td>
+                            <td>${payment.request_date}</td>
+                            <td>${payment.retry_count}/3</td>
+                            <td>
+                                <button onclick="verifyPayment('${payment.employee_id}')">Verify</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                tableHtml += `
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('pending-payments').innerHTML = tableHtml;
+            } catch (error) {
+                console.error('Error loading pending payments:', error);
+                document.getElementById('pending-payments').innerHTML = '<p class="error">Error loading payments</p>';
+            }
+        }
+        
+        async function verifyPayment(employeeId) {
+            try {
+                const response = await fetch(`/admin/payments/verify/${employeeId}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`Success: ${result.message}\nStatus: ${result.status}`);
+                    loadData();
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert('Error verifying payment: ' + error.message);
+            }
+        }
+        
+        async function checkPendingPayments() {
+            try {
+                const response = await fetch('/admin/payments/check-pending', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('Pending payment check triggered. Check logs for results.');
+                    setTimeout(() => loadData(), 3000);
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        async function retryFailedPayments() {
+            try {
+                const response = await fetch('/admin/payments/retry-all', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('Payment retry process triggered. Check logs for results.');
+                    setTimeout(() => loadData(), 3000);
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        function loadData() {
+            loadStats();
+            loadPendingPayments();
+        }
+        
+        // Auto-refresh every 30 seconds
+        loadData();
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>

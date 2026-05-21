@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Tap & Pay - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tap"></i>
+                <span>Tap & Pay</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item active">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="employees.html" class="nav-item">
+                    <i class="fas fa-users"></i>
+                    <span>Employees</span>
+                </a>
+                <a href="attendance.html" class="nav-item">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>Attendance</span>
+                </a>
+                <a href="register.html" class="nav-item">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Register</span>
+                </a>
+                 <a href="admin.html" class="nav-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+                <div class="time-display" id="currentTime"></div>
+            </div>
+
+            <div class="user-info" style="padding: 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-user-circle" style="font-size: 32px; color: var(--primary-color);"></i>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">Logged in as</div>
+                        <div style="font-size: 14px; font-weight: 600;" id="userEmail">Admin</div>
+                    </div>
+                </div>
+            </div>
+                
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Dashboard</h1>
+                    <p>Real-time overview of your attendance & payment system</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-refresh" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalEmployees">0</h3>
+                        <p>Total Employees</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon attendance">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="attendedToday">0</h3>
+                        <p>Attended Today</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon payment">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="paidToday">0</h3>
+                        <p>Paid Today</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon percentage">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="attendancePercentage">0%</h3>
+                        <p>Attendance Rate</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Attendance Overview</h3>
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <canvas id="attendanceChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Payment Status</h3>
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <canvas id="paymentChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="recent-activity">
+                <div class="activity-header">
+                    <h3>Recent Activity</h3>
+                    <button class="btn-view-all" onclick="window.location.href='attendance.html'">
+                        View All <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+                <div class="activity-list" id="recentActivity">
+                    <div class="loading">Loading recent activity...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="JS/config.js"></script>
+    <script src="JS/script.js"></script>
+    <script src="JS/auth.js"></script>
+</body>
+</html>

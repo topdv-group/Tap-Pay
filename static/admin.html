@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap & Pay - Admin Settings</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tap"></i>
+                <span>Tap & Pay</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="employees.html" class="nav-item">
+                    <i class="fas fa-users"></i>
+                    <span>Employees</span>
+                </a>
+                <a href="attendance.html" class="nav-item">
+                    <i class="fas fa-fingerprint"></i>
+                    <span>Attendance</span>
+                </a>
+                <a href="register.html" class="nav-item">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Register</span>
+                </a>
+                <a href="admin.html" class="nav-item active">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+                <div class="time-display" id="currentTime"></div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Admin Settings</h1>
+                    <p>Configure system parameters and payment schedules</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-refresh" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Settings Tabs -->
+            <div class="settings-tabs">
+                <button class="tab-btn active" data-tab="payment">
+                    <i class="fas fa-money-bill-wave"></i> Payment Settings
+                </button>
+                <button class="tab-btn" data-tab="attendance">
+                    <i class="fas fa-clock"></i> Attendance Settings
+                </button>
+                <button class="tab-btn" data-tab="system">
+                    <i class="fas fa-server"></i> System Settings
+                </button>
+                <button class="tab-btn" data-tab="logs">
+                    <i class="fas fa-history"></i> System Logs
+                </button>
+            </div>
+
+            <!-- Payment Settings Tab -->
+            <div id="paymentTab" class="tab-content active">
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-money-bill-wave"></i> Payment Configuration</h2>
+                        <p>Configure when and how much to pay employees</p>
+                    </div>
+                    
+                    <form id="paymentSettingsForm" class="settings-form">
+                        <div class="form-group">
+                            <label for="paymentTime">
+                                <i class="fas fa-clock"></i> Payment Time
+                            </label>
+                            <input type="time" id="paymentTime" name="paymentTime" required>
+                            <small class="form-hint">Time when automatic payments will be processed daily (24-hour format)</small>
+                            <div class="current-value" id="currentPaymentTime"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="payAmount">
+                                <i class="fas fa-dollar-sign"></i> Payment Amount (RWF)
+                            </label>
+                            <input type="number" id="payAmount" name="payAmount" required min="100" step="100">
+                            <small class="form-hint">Amount to pay each employee per day</small>
+                            <div class="current-value" id="currentPayAmount"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="shiftExpireTime">
+                                <i class="fas fa-hourglass-end"></i> Shift Expiry Time
+                            </label>
+                            <input type="time" id="shiftExpireTime" name="shiftExpireTime" required>
+                            <small class="form-hint">Time when attendance resets for the next day</small>
+                            <div class="current-value" id="currentShiftExpireTime"></div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" onclick="resetPaymentSettings()">
+                                <i class="fas fa-undo"></i> Reset to Default
+                            </button>
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save"></i> Save Payment Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-chart-line"></i> Payment Statistics</h2>
+                    </div>
+                    <div class="stats-preview">
+                        <div class="stat-item">
+                            <span>Today's Expected Payout:</span>
+                            <strong id="expectedPayout">0 RWF</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span>Next Payment Time:</span>
+                            <strong id="nextPaymentTime">--:--</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span>Time Until Next Payment:</span>
+                            <strong id="timeUntilPayment">--</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Settings Tab - Simplified -->
+            <div id="attendanceTab" class="tab-content">
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-fingerprint"></i> Attendance Configuration</h2>
+                        <p>Configure attendance tracking parameters</p>
+                    </div>
+                    
+                    <div class="info-message" style="background: #dbeafe; padding: 16px; border-radius: 12px; margin-bottom: 20px;">
+                        <i class="fas fa-info-circle" style="color: #3b82f6;"></i>
+                        <strong>Note:</strong> Attendance reset time is controlled by the <strong>"Shift Expiry Time"</strong> in Payment Settings.
+                        <br>Please go to the <strong>Payment Settings</strong> tab to change the shift expiry time.
+                    </div>
+                    
+                    <div class="current-settings">
+                        <h3>Current Settings:</h3>
+                        <div class="stat-item">
+                            <span>Shift Expiry Time:</span>
+                            <strong id="displayShiftExpiryTime">--:--</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span>Last Reset Date:</span>
+                            <strong id="lastResetDate">--</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Settings Tab -->
+            <!-- System Settings Tab -->
+<div id="systemTab" class="tab-content">
+    <!-- Admin Authentication -->
+    <div class="settings-card">
+        <div class="card-header">
+            <h2><i class="fas fa-shield-alt"></i> Admin Authentication</h2>
+            <p>Change admin credentials and security settings</p>
+        </div>
+        
+        <form id="systemSettingsForm" class="settings-form">
+            <div class="form-group">
+                <label for="adminUsername">
+                    <i class="fas fa-user"></i> Admin Username
+                </label>
+                <input type="text" id="adminUsername" name="adminUsername" placeholder="Enter new username">
+                <small class="form-hint">Current username will be displayed after loading</small>
+                <div class="current-value" id="currentUsername"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="adminPassword">
+                    <i class="fas fa-lock"></i> Admin Password
+                </label>
+                <input type="password" id="adminPassword" name="adminPassword" placeholder="Enter new password">
+                <small class="form-hint">Leave blank to keep current password</small>
+            </div>
+
+            <div class="form-group">
+                <label for="confirmPassword">
+                    <i class="fas fa-check-circle"></i> Confirm Password
+                </label>
+                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm new password">
+                <small class="form-hint">Re-enter the new password to confirm</small>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> Update Admin Credentials
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Session Management -->
+    <div class="settings-card">
+        <div class="card-header">
+            <h2><i class="fas fa-clock"></i> Session Management</h2>
+            <p>Configure session timeout and security</p>
+        </div>
+        
+        <div class="settings-form">
+            <div class="form-group">
+                <label for="sessionTimeout">
+                    <i class="fas fa-hourglass-half"></i> Session Timeout (minutes)
+                </label>
+                <input type="number" id="sessionTimeout" name="sessionTimeout" min="5" max="480" value="30">
+                <small class="form-hint">Auto logout after inactivity (5-480 minutes)</small>
+            </div>
+            
+            <div class="switch-group">
+                <span class="switch-label">
+                    <i class="fas fa-shield-alt"></i> Two-Factor Authentication
+                </span>
+                <label class="switch">
+                    <input type="checkbox" id="twoFactorAuth">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="switch-group">
+                <span class="switch-label">
+                    <i class="fas fa-envelope"></i> Email Notifications
+                </span>
+                <label class="switch">
+                    <input type="checkbox" id="emailNotifications" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="form-actions">
+                <button class="btn-primary" onclick="saveSessionSettings()">
+                    <i class="fas fa-save"></i> Save Session Settings
+                </button>
+                <button class="btn-secondary" onclick="clearAllSessions()">
+                    <i class="fas fa-sign-out-alt"></i> Clear All Sessions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Actions -->
+    <div class="settings-card">
+        <div class="card-header">
+            <h2><i class="fas fa-database"></i> Database Management</h2>
+            <p>Manage your database - Backup, Restore, and Maintenance</p>
+        </div>
+        
+        <div class="database-actions">
+            <div class="action-group">
+                <h3><i class="fas fa-download"></i> Backup</h3>
+                <p>Download a complete backup of your database</p>
+                <button class="btn-primary" onclick="backupDatabase()">
+                    <i class="fas fa-database"></i> Download Backup
+                </button>
+            </div>
+            
+            <div class="action-group">
+                <h3><i class="fas fa-upload"></i> Restore</h3>
+                <p>Restore database from a backup file</p>
+                <input type="file" id="restoreFile" accept=".json" style="display: none;">
+                <button class="btn-secondary" onclick="document.getElementById('restoreFile').click()">
+                    <i class="fas fa-upload"></i> Choose Backup File
+                </button>
+                <button class="btn-primary" onclick="restoreDatabase()" id="restoreBtn" style="display: none;">
+                    <i class="fas fa-sync-alt"></i> Restore Database
+                </button>
+            </div>
+            
+            <div class="action-group">
+                <h3><i class="fas fa-chart-line"></i> Database Stats</h3>
+                <div class="stats-grid-mini">
+                    <div class="stat-mini">
+                        <span>Total Records:</span>
+                        <strong id="totalRecords">0</strong>
+                    </div>
+                    <div class="stat-mini">
+                        <span>Database Size:</span>
+                        <strong id="dbSize">0 KB</strong>
+                    </div>
+                    <div class="stat-mini">
+                        <span>Last Backup:</span>
+                        <strong id="lastBackup">Never</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="danger-zone">
+            <h3><i class="fas fa-exclamation-triangle"></i> Danger Zone</h3>
+            <p>These actions are irreversible. Please be careful!</p>
+            <div class="danger-actions">
+                <button class="btn-danger" onclick="clearAllData()">
+                    <i class="fas fa-trash-alt"></i> Delete All Employee Data
+                </button>
+                <button class="btn-danger" onclick="resetSystem()">
+                    <i class="fas fa-power-off"></i> Factory Reset System
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="settings-card">
+        <div class="card-header">
+            <h2><i class="fas fa-info-circle"></i> System Information</h2>
+            <p>Current system status and configuration</p>
+        </div>
+        
+        <div class="system-info">
+            <div class="info-row">
+                <span class="info-label">Python Version:</span>
+                <span class="info-value" id="pythonVersion">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Flask Version:</span>
+                <span class="info-value" id="flaskVersion">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Firebase Status:</span>
+                <span class="info-value" id="firebaseStatus">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Server Time:</span>
+                <span class="info-value" id="serverTime">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">System Uptime:</span>
+                <span class="info-value" id="systemUptime">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Environment:</span>
+                <span class="info-value" id="environment">--</span>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button class="btn-secondary" onclick="refreshSystemInfo()">
+                <i class="fas fa-sync-alt"></i> Refresh Info
+            </button>
+        </div>
+    </div>
+</div>
+
+            <!-- System Logs Tab -->
+            <div id="logsTab" class="tab-content">
+                <div class="settings-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-history"></i> Recent System Logs</h2>
+                        <button class="btn-refresh" onclick="loadSystemLogs()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="loading">Loading logs...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Confirm Action</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure you want to perform this action?</p>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn-danger" id="confirmActionBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="JS/config.js"></script>
+    <script src="JS/admin.js"></script>
+    <script src="JS/auth.js"></script>
+</body>
+</html>
